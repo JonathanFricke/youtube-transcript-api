@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 import re
 
-from requests import HTTPError
+from requests import HTTPError, Timeout
 
 from ._html_unescaping import unescape
 from ._errors import (
@@ -35,6 +35,9 @@ def _raise_http_errors(response, video_id):
         return response
     except HTTPError as error:
         raise YouTubeRequestFailed(error, video_id)
+    except Timeout as error:
+        raise YouTubeRequestFailed(error, video_id)
+        
 
 
 class TranscriptListFetcher(object):
