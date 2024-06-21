@@ -41,11 +41,11 @@ class TranscriptListFetcher(object):
     def __init__(self, http_client):
         self._http_client = http_client
 
-    def fetch(self, video_id):
+    def fetch(self, video_id, timeout=None):
         return TranscriptList.build(
             self._http_client,
             video_id,
-            self._extract_captions_json(self._fetch_video_html(video_id), video_id),
+            self._extract_captions_json(self._fetch_video_html(video_id, timeout=timeout), video_id),
         )
 
     def _extract_captions_json(self, html, video_id):
@@ -78,17 +78,17 @@ class TranscriptListFetcher(object):
             raise FailedToCreateConsentCookie(video_id)
         self._http_client.cookies.set('CONSENT', 'YES+' + match.group(1), domain='.youtube.com')
 
-    def _fetch_video_html(self, video_id):
-        html = self._fetch_html(video_id)
+    def _fetch_video_html(self, video_id, timeout=None):
+        html = self._fetch_html(video_id, timeout=timeout)
         if 'action="https://consent.youtube.com/s"' in html:
             self._create_consent_cookie(html, video_id)
-            html = self._fetch_html(video_id)
+            html = self._fetch_html(video_id, timeout=timeout)
             if 'action="https://consent.youtube.com/s"' in html:
                 raise FailedToCreateConsentCookie(video_id)
         return html
 
-    def _fetch_html(self, video_id):
-        response = self._http_client.get(WATCH_URL.format(video_id=video_id), headers={'Accept-Language': 'en-US'})
+    def _fetch_html(self, video_id, timeout=None):
+        response = self._http_client.get(WATCH_URL.format(video_id=video_id), headers={'Accept-Language': 'en-US'}, timeout=timeout)
         return unescape(_raise_http_errors(response, video_id).text)
 
 
@@ -280,7 +280,7 @@ class Transcript(object):
             for translation_language in translation_languages
         }
 
-    def fetch(self, preserve_formatting=False):
+    def fetch(self, preserve_formatting=False, timeout=None):
         """
         Loads the actual transcript data.
         :param preserve_formatting: whether to keep select HTML text formatting
@@ -288,7 +288,7 @@ class Transcript(object):
         :return: a list of dictionaries containing the 'text', 'start' and 'duration' keys
         :rtype [{'text': str, 'start': float, 'end': float}]:
         """
-        response = self._http_client.get(self._url, headers={'Accept-Language': 'en-US'})
+        response = self._http_client.get(self._url, headers={'Accept-Language': 'en-US'}, timeout=timeout)
         return _TranscriptParser(preserve_formatting=preserve_formatting).parse(
             _raise_http_errors(response, self.video_id).text,
         )
