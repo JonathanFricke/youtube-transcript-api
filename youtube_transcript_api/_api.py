@@ -1,4 +1,4 @@
-import requests
+# import requests
 try: # pragma: no cover
     import http.cookiejar as cookiejar
     CookieLoadError = (FileNotFoundError, cookiejar.LoadError)
@@ -16,7 +16,7 @@ from ._errors import (
 
 class YouTubeTranscriptApi(object):
     @classmethod
-    def list_transcripts(cls, video_id, proxies=None, cookies=None, timeout=None):
+    async def list_transcripts(cls, session, video_id, proxy, cookies=None, timeout=None):
         """
         Retrieves the list of transcripts which are available for a given video. It returns a `TranscriptList` object
         which is iterable and provides methods to filter the list of transcripts for specific languages. While iterating
@@ -64,14 +64,22 @@ class YouTubeTranscriptApi(object):
         :return: the list of available transcripts
         :rtype TranscriptList:
         """
-        with requests.Session() as http_client:
-            if cookies:
-                http_client.cookies = cls._load_cookies(cookies, video_id)
-            http_client.proxies = proxies if proxies else {}
-            return TranscriptListFetcher(http_client).fetch(video_id, timeout=timeout)
+        # with requests.Session() as http_client:
+        #     if cookies:
+        #         http_client.cookies = cls._load_cookies(cookies, video_id)
+        #     http_client.proxies = proxies if proxies else {}
+        
+        if cookies:
+            session.cookie_jar.update_cookies(cls._load_cookies(cookies, video_id))
+        # session.connector.proxy = proxies if proxies else {}
+        # session.connector.proxy = proxy
+        
+        transcript_fetcher = TranscriptListFetcher(session)
+
+        return await transcript_fetcher.fetch(session, video_id, proxy=proxy, timeout=timeout)
 
     @classmethod
-    def get_transcripts(cls, video_ids, languages=('en',), continue_after_error=False, proxies=None,
+    async def get_transcripts(cls, video_ids, proxies, languages=('en',), continue_after_error=False,
                         cookies=None, preserve_formatting=False):
         """
         Retrieves the transcripts for a list of videos.
@@ -102,7 +110,7 @@ class YouTubeTranscriptApi(object):
 
         for video_id in video_ids:
             try:
-                data[video_id] = cls.get_transcript(video_id, languages, proxies, cookies, preserve_formatting)
+                data[video_id] = await cls.get_transcript(video_id, languages, proxies, cookies, preserve_formatting)
             except Exception as exception:
                 if not continue_after_error:
                     raise exception
@@ -112,7 +120,7 @@ class YouTubeTranscriptApi(object):
         return data, unretrievable_videos
 
     @classmethod
-    def get_transcript(cls, video_id, languages=('en',), proxies=None, cookies=None, preserve_formatting=False, timeout=None):
+    async def get_transcript(cls, session, video_id, proxy, languages=('en',), cookies=None, preserve_formatting=False, timeout=None):
         """
         Retrieves the transcript for a single video. This is just a shortcut for calling::
 
@@ -134,8 +142,11 @@ class YouTubeTranscriptApi(object):
         :rtype [{'text': str, 'start': float, 'end': float}]:
         """
         assert isinstance(video_id, str), "`video_id` must be a string"
-        return cls.list_transcripts(video_id, proxies, cookies).find_transcript(languages).fetch(preserve_formatting=preserve_formatting, timeout=timeout)
-
+        list_transcipts = await cls.list_transcripts(session, video_id, proxy, cookies, timeout=timeout)
+        list_transcipts = list_transcipts.find_transcript(languages)
+        list_transcipts = await list_transcipts.fetch(session, proxy, preserve_formatting=preserve_formatting, timeout=timeout)
+        return list_transcipts
+        # return await cls.list_transcripts(session, video_id, proxies, cookies).find_transcript(languages).fetch(preserve_formatting=preserve_formatting, timeout=timeout)
     @classmethod
     def _load_cookies(cls, cookies, video_id):
         try:

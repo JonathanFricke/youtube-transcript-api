@@ -36,7 +36,7 @@ class YouTubeTranscriptCli(object):
         )
 
     def _fetch_transcript(self, parsed_args, proxies, cookies, video_id, timeout=None):
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxies=proxies, cookies=cookies, timeout=timeout)
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, proxy=proxies, cookies=cookies, timeout=timeout)
 
         if parsed_args.list_transcripts:
             return str(transcript_list)

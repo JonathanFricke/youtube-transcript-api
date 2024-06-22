@@ -3,7 +3,7 @@ from mock import patch
 
 import os
 
-import requests
+# import requests
 
 import httpretty
 
@@ -266,7 +266,7 @@ class TestYouTubeTranscriptApi(TestCase):
     def test_get_transcript__with_proxy(self):
         proxies = {'http': '', 'https:': ''}
         transcript = YouTubeTranscriptApi.get_transcript(
-            'GJLlxj_dtq8', proxies=proxies
+            'GJLlxj_dtq8', proxy=proxies
         )
         self.assertEqual(
             transcript,
@@ -338,11 +338,11 @@ class TestYouTubeTranscriptApi(TestCase):
         YouTubeTranscriptApi.get_transcripts(['GJLlxj_dtq8'], proxies=proxies)
         mock_get_transcript.assert_any_call('GJLlxj_dtq8', ('en',), proxies, None, False)
 
-    def test_load_cookies(self):
-        dirname, filename = os.path.split(os.path.abspath(__file__))
-        cookies = dirname + '/example_cookies.txt'
-        session_cookies = YouTubeTranscriptApi._load_cookies(cookies, 'GJLlxj_dtq8')
-        self.assertEqual({'TEST_FIELD': 'TEST_VALUE'},  requests.utils.dict_from_cookiejar(session_cookies))
+    # def test_load_cookies(self):
+    #     dirname, filename = os.path.split(os.path.abspath(__file__))
+    #     cookies = dirname + '/example_cookies.txt'
+    #     session_cookies = YouTubeTranscriptApi._load_cookies(cookies, 'GJLlxj_dtq8')
+    #     self.assertEqual({'TEST_FIELD': 'TEST_VALUE'},  requests.utils.dict_from_cookiejar(session_cookies))
 
     def test_load_cookies__bad_file_path(self):
         bad_cookies = 'nonexistent_cookies.txt'

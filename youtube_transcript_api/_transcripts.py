@@ -12,6 +12,7 @@ from xml.etree import ElementTree
 import re
 
 from requests import HTTPError, Timeout
+import aiohttp
 
 from ._html_unescaping import unescape
 from ._errors import (
@@ -33,22 +34,25 @@ def _raise_http_errors(response, video_id):
     try:
         response.raise_for_status()
         return response
-    except HTTPError as error:
+    except aiohttp.ClientResponseError as error:
+        # For client-side errors, including invalid responses
         raise YouTubeRequestFailed(error, video_id)
-    except Timeout as error:
+    except aiohttp.ClientTimeout as error:
+        # For timeouts
         raise YouTubeRequestFailed(error, video_id)
         
 
 
 class TranscriptListFetcher(object):
-    def __init__(self, http_client):
-        self._http_client = http_client
+    def __init__(self, session):
+        self._session = session
 
-    def fetch(self, video_id, timeout=None):
+    async def fetch(self, session, video_id, proxy, timeout=None):
+        fetch_video_html = await self._fetch_video_html(session, video_id, proxy=proxy, timeout=timeout)
         return TranscriptList.build(
-            self._http_client,
+            self._session,
             video_id,
-            self._extract_captions_json(self._fetch_video_html(video_id, timeout=timeout), video_id),
+            self._extract_captions_json(fetch_video_html, video_id),
         )
 
     def _extract_captions_json(self, html, video_id):
@@ -75,24 +79,33 @@ class TranscriptListFetcher(object):
 
         return captions_json
 
-    def _create_consent_cookie(self, html, video_id):
+    def _create_consent_cookie(self, session, html, video_id):
         match = re.search('name="v" value="(.*?)"', html)
         if match is None:
             raise FailedToCreateConsentCookie(video_id)
-        self._http_client.cookies.set('CONSENT', 'YES+' + match.group(1), domain='.youtube.com')
+        session.cookie_jar.update_cookies({'CONSENT': {'value': 'YES+' + match.group(1), 'domain': '.youtube.com'} })
 
-    def _fetch_video_html(self, video_id, timeout=None):
-        html = self._fetch_html(video_id, timeout=timeout)
+    async def _fetch_video_html(self, session, video_id, proxy, timeout=None):
+        html = await self._fetch_html(session, video_id, proxy=proxy, timeout=timeout)
         if 'action="https://consent.youtube.com/s"' in html:
-            self._create_consent_cookie(html, video_id)
-            html = self._fetch_html(video_id, timeout=timeout)
+            self._create_consent_cookie(session, html, video_id)
+            html = await self._fetch_html(session, video_id, proxy=proxy, timeout=timeout)
             if 'action="https://consent.youtube.com/s"' in html:
                 raise FailedToCreateConsentCookie(video_id)
         return html
 
-    def _fetch_html(self, video_id, timeout=None):
-        response = self._http_client.get(WATCH_URL.format(video_id=video_id), headers={'Accept-Language': 'en-US'}, timeout=timeout)
-        return unescape(_raise_http_errors(response, video_id).text)
+    async def _fetch_html(self, session, video_id, proxy, timeout=None):
+        async with session.get(WATCH_URL.format(video_id=video_id), proxy=proxy, timeout=timeout) as response:
+            if response.status == 200:
+                print("SUCCESSFULL _fetch_html")
+				# return unescape(_raise_http_errors(await response, video_id).text())
+				# return unescape(_raise_http_errors(await response.text(), video_id))
+                return unescape(await response.text())
+            else:
+                raise aiohttp.ClientResponseError(
+                        status=response.status,
+                        message=f"Unexpected status code: {response.status}"
+                    )
 
 
 class TranscriptList(object):
@@ -283,7 +296,7 @@ class Transcript(object):
             for translation_language in translation_languages
         }
 
-    def fetch(self, preserve_formatting=False, timeout=None):
+    async def fetch(self, session, proxy, preserve_formatting=False, timeout=None):
         """
         Loads the actual transcript data.
         :param preserve_formatting: whether to keep select HTML text formatting
@@ -291,10 +304,27 @@ class Transcript(object):
         :return: a list of dictionaries containing the 'text', 'start' and 'duration' keys
         :rtype [{'text': str, 'start': float, 'end': float}]:
         """
-        response = self._http_client.get(self._url, headers={'Accept-Language': 'en-US'}, timeout=timeout)
-        return _TranscriptParser(preserve_formatting=preserve_formatting).parse(
-            _raise_http_errors(response, self.video_id).text,
-        )
+
+        async with session.get(self._url, headers={'Accept-Language': 'en-US'}, proxy=proxy, timeout=timeout) as response:
+            if response.status == 200:
+                print("SUCCESSFULL fetch")
+                respone_text = await response.text()
+                print(respone_text)
+                
+                # return _TranscriptParser(preserve_formatting=preserve_formatting).parse(
+			    #     _raise_http_errors(respone_text, self.video_id),
+			    # )
+                return _TranscriptParser(preserve_formatting=preserve_formatting).parse(respone_text)
+            else:
+                raise aiohttp.ClientResponseError(
+                    status=response.status,
+                    message=f"Unexpected status code: {response.status}"
+                )
+
+        # response = self._http_client.get(self._url, headers={'Accept-Language': 'en-US'}, timeout=timeout)
+        # return _TranscriptParser(preserve_formatting=preserve_formatting).parse(
+        #     _raise_http_errors(response, self.video_id).text,
+        # )
 
     def __str__(self):
         return '{language_code} ("{language}"){translation_description}'.format(
