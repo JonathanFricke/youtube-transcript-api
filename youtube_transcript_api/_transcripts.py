@@ -97,15 +97,23 @@ class TranscriptListFetcher(object):
     async def _fetch_html(self, session, video_id, proxy, timeout=None):
         async with session.get(WATCH_URL.format(video_id=video_id), proxy=proxy, timeout=timeout) as response:
             if response.status == 200:
-                print("SUCCESSFULL _fetch_html")
-				# return unescape(_raise_http_errors(await response, video_id).text())
-				# return unescape(_raise_http_errors(await response.text(), video_id))
                 return unescape(await response.text())
             else:
+                
+                # Manually constructing request_info and history for the error
+                request_info = aiohttp.RequestInfo(
+                        url=aiohttp.helpers.URL(WATCH_URL.format(video_id=video_id)), 
+                        real_url=aiohttp.helpers.URL(WATCH_URL.format(video_id=video_id)), 
+                        method='GET', 
+                        headers={})
+                history = [(WATCH_URL.format(video_id=video_id), response.status)]  # Simplified history
+
                 raise aiohttp.ClientResponseError(
-                        status=response.status,
-                        message=f"Unexpected status code: {response.status}"
-                    )
+                    request_info=request_info,
+                    history=history,
+                    status=response.status,
+                    message=f"Unexpected status code: {response.status}"
+                )
 
 
 class TranscriptList(object):
@@ -307,24 +315,23 @@ class Transcript(object):
 
         async with session.get(self._url, headers={'Accept-Language': 'en-US'}, proxy=proxy, timeout=timeout) as response:
             if response.status == 200:
-                print("SUCCESSFULL fetch")
                 respone_text = await response.text()
-                print(respone_text)
-                
-                # return _TranscriptParser(preserve_formatting=preserve_formatting).parse(
-			    #     _raise_http_errors(respone_text, self.video_id),
-			    # )
                 return _TranscriptParser(preserve_formatting=preserve_formatting).parse(respone_text)
             else:
+                # Manually constructing request_info and history for the error
+                request_info = aiohttp.RequestInfo(
+                        url=aiohttp.helpers.URL(self._url), 
+                        real_url=aiohttp.helpers.URL(self._url), 
+                        method='GET', 
+                        headers={})
+                history = [(self._url, response.status)]  # Simplified history
+
                 raise aiohttp.ClientResponseError(
+                    request_info=request_info,
+                    history=history,
                     status=response.status,
                     message=f"Unexpected status code: {response.status}"
                 )
-
-        # response = self._http_client.get(self._url, headers={'Accept-Language': 'en-US'}, timeout=timeout)
-        # return _TranscriptParser(preserve_formatting=preserve_formatting).parse(
-        #     _raise_http_errors(response, self.video_id).text,
-        # )
 
     def __str__(self):
         return '{language_code} ("{language}"){translation_description}'.format(
